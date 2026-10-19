@@ -65,6 +65,7 @@ function item(
 
 export const CATALOG: CatalogItem[] = [
   // Workstations
+  item('station-table', 'Station table 60×30"', 'workstations', 1.524, 0.762, 0.74),
   item('desk-1600', 'Desk 1600', 'workstations', 1.6, 0.8, 0.75),
   item('desk-1200', 'Desk 1200', 'workstations', 1.2, 0.6, 0.75),
   item('workbench', 'Workbench', 'workstations', 1.8, 0.9, 0.9),
@@ -72,6 +73,7 @@ export const CATALOG: CatalogItem[] = [
   item('conf-table-8', 'Conference table (8)', 'workstations', 2.4, 1.2, 0.75),
 
   // Seating
+  item('station-chair', 'Station chair 36×31"', 'seating', 0.914, 0.787, 1.0),
   item('task-chair', 'Task chair', 'seating', 0.65, 0.65, 1.0),
   item('bar-stool', 'Bar stool', 'seating', 0.45, 0.45, 0.75),
 

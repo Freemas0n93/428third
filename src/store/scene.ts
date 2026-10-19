@@ -1,38 +1,36 @@
 import { create } from 'zustand'
 import { CATALOG_BY_KEY } from '../data/catalog'
+import { LAYER_GROUPS, LEVELS, STATION_GRID, type LevelMode } from '../data/building'
 
-/** A catalog item placed in the scene. Position is the object's footprint center on the floor. */
+/**
+ * A catalog item placed in the scene. (x, y, z) is the footprint center on the floor it
+ * stands on, in the building frame (see src/data/building.ts). y = that floor's elevation.
+ */
 export interface PlacedObject {
   id: string
   catalogKey: string
   label: string
   x: number
+  y: number
   z: number
   rotY: number // radians
   hex: string
   locked: boolean
 }
 
-export type ViewPreset = 'overview' | 'plan' | 'entrance'
-
-/**
- * Placeholder building envelope until the scan is in (meters).
- * Origin at floor center, +Z toward the street-facing wall.
- * Replaced on Day 1 by the calibrated scan GLB.
- */
-export const PLACEHOLDER_ROOM = {
-  width: 18, // x
-  depth: 10, // z
-  height: 4.2, // y
-  wallThickness: 0.2,
-  storefrontWidth: 8,
-}
+export type ViewPreset = 'overview' | 'plan' | 'hall' | 'mezzanine'
 
 interface SceneState {
   objects: PlacedObject[]
   selectedId: string | null
   view: ViewPreset
-  scanLoaded: boolean
+  /** Bumped on every setView so re-clicking a preset re-frames the camera. */
+  viewNonce: number
+  level: LevelMode
+  /** Section cut-away at the current level's cut height (ignored when level = 'all'). */
+  cut: boolean
+  layers: Record<string, boolean>
+  showStationGrid: boolean
 
   addObject: (catalogKey: string, at?: { x: number; z: number }) => string
   updateObject: (id: string, patch: Partial<Omit<PlacedObject, 'id'>>) => void
@@ -40,6 +38,10 @@ interface SceneState {
   duplicateObject: (id: string) => void
   select: (id: string | null) => void
   setView: (view: ViewPreset) => void
+  setLevel: (level: LevelMode) => void
+  setCut: (on: boolean) => void
+  setLayer: (key: string, on: boolean) => void
+  setShowStationGrid: (on: boolean) => void
 }
 
 let counter = 0
@@ -48,54 +50,76 @@ function nextId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${counter}`
 }
 
-function seedObjects(): PlacedObject[] {
-  const seed: Array<[string, number, number, number]> = [
-    // catalogKey, x, z, rotY
-    ['reception-desk', -6.5, 3.2, 0],
-    ['robot-cell', 4.5, 0.5, 0],
-    ['humanoid-stand', -1.5, 1.5, 0],
-    ['display-plinth', -3.0, 1.5, 0],
-    ['display-75', 0, -4.3, 0],
-    ['sofa-3', -5.5, -2.5, Math.PI],
-    ['coffee-table', -5.5, -1.2, 0],
-    ['lounge-chair', -7.6, -1.6, Math.PI / 2],
-    ['bar-3m', 6.5, -3.8, 0],
-    ['planter-l', 8.2, 4.2, 0],
-    ['planter-l', -8.2, 4.2, 0],
-  ]
-  return seed.map(([catalogKey, x, z, rotY]) => {
-    const item = CATALOG_BY_KEY[catalogKey]
-    return {
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+/** The accepted 16-station layout: one 60×30" table + one 36×31" chair per 2.0 × 2.5 m cell. */
+function seedStations(): PlacedObject[] {
+  const g = STATION_GRID
+  const table = CATALOG_BY_KEY['station-table']
+  const chair = CATALOG_BY_KEY['station-chair']
+  const out: PlacedObject[] = []
+  for (let s = 0; s < g.cols * g.rows; s++) {
+    const col = g.cols - 1 - Math.floor(s / g.rows) // station 01 sits in the column farthest from the front
+    const row = s % g.rows
+    const cellX = g.x0 + col * g.cellX
+    const z = g.z0 + row * g.cellZ + g.cellZ / 2
+    const n = pad2(s + 1)
+    // Both items are rotated 90° so their long side runs across the hall (along Z).
+    out.push({
       id: nextId('obj'),
-      catalogKey,
-      label: item.name,
-      x,
+      catalogKey: table.key,
+      label: `Station ${n}`,
+      x: cellX + g.tableOffsetX,
+      y: 0,
       z,
-      rotY,
-      hex: item.hex,
+      rotY: Math.PI / 2,
+      hex: table.hex,
       locked: false,
-    }
-  })
+    })
+    out.push({
+      id: nextId('obj'),
+      catalogKey: chair.key,
+      label: `Chair ${n}`,
+      x: cellX + g.chairOffsetX,
+      y: 0,
+      z,
+      rotY: Math.PI / 2,
+      hex: chair.hex,
+      locked: false,
+    })
+  }
+  return out
 }
 
+const defaultLayers = Object.fromEntries(LAYER_GROUPS.map((g) => [g.key, g.defaultOn]))
+
+/** Views that are only useful with the full building visible switch the level to 'all'. */
+const VIEW_LEVEL: Partial<Record<ViewPreset, LevelMode>> = { hall: 'all', mezzanine: 'all' }
+
 export const useScene = create<SceneState>((set, get) => ({
-  objects: seedObjects(),
+  objects: seedStations(),
   selectedId: null,
   view: 'overview',
-  scanLoaded: false,
+  viewNonce: 0,
+  level: 'ground',
+  cut: true,
+  layers: defaultLayers,
+  showStationGrid: true,
 
   addObject: (catalogKey, at) => {
     const item = CATALOG_BY_KEY[catalogKey]
     if (!item) throw new Error(`Unknown catalog key: ${catalogKey}`)
     const id = nextId('obj')
-    const n = get().objects.length
+    const { level, objects } = get()
+    const lv = LEVELS[level === 'all' ? 'ground' : level]
     // Stagger new objects slightly so repeated adds don't stack exactly.
-    const x = at?.x ?? ((n % 5) - 2) * 0.6
-    const z = at?.z ?? 0
+    const n = objects.length
+    const x = at?.x ?? lv.dropPoint.x + ((n % 5) - 2) * 0.6
+    const z = at?.z ?? lv.dropPoint.z
     set((s) => ({
       objects: [
         ...s.objects,
-        { id, catalogKey, label: item.name, x, z, rotY: 0, hex: item.hex, locked: false },
+        { id, catalogKey, label: item.name, x, y: lv.floorY, z, rotY: 0, hex: item.hex, locked: false },
       ],
       selectedId: id,
     }))
@@ -127,5 +151,10 @@ export const useScene = create<SceneState>((set, get) => ({
   },
 
   select: (id) => set({ selectedId: id }),
-  setView: (view) => set({ view }),
+  setView: (view) =>
+    set((s) => ({ view, viewNonce: s.viewNonce + 1, level: VIEW_LEVEL[view] ?? s.level })),
+  setLevel: (level) => set({ level }),
+  setCut: (cut) => set({ cut }),
+  setLayer: (key, on) => set((s) => ({ layers: { ...s.layers, [key]: on } })),
+  setShowStationGrid: (showStationGrid) => set({ showStationGrid }),
 }))
