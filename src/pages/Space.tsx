@@ -216,7 +216,8 @@ export default function Space() {
         }`}
       >
         <section className="border-b border-[var(--line)] p-3">
-          <div className="mb-2 flex items-center justify-between">
+          {/* pr-14 keeps the snap control clear of the phone-only Hide button at the panel's top-right */}
+          <div className="mb-2 flex items-center justify-between pr-14 md:pr-0">
             <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Selection</h2>
             <SnapControl />
           </div>
