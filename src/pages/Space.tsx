@@ -55,7 +55,7 @@ function ModelStatus() {
     text = `Loading building… ${mb(got)} / ${mb(total)} MB`
   }
   return (
-    <div className="flex items-center gap-2 rounded-md bg-black/60 px-2 py-1 text-[11px] text-[var(--muted)]">
+    <div data-testid="model-status" className="flex items-center gap-2 rounded-md bg-black/60 px-2 py-1 text-[11px] text-[var(--muted)]">
       <span className={`inline-block h-2 w-2 rounded-full ${dot}`} />
       {text}
     </div>

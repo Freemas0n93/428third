@@ -19,10 +19,14 @@ interface CameraPose {
 
 const C = SITE_DIMS.center
 
-/** Camera presets in the building frame (origin = datum A, +X down the hall, +Z toward the brick wall). */
+/**
+ * Camera presets in the building frame (origin = datum A, +X down the hall, +Z toward the brick wall).
+ * Overview and Plan aim ~8 m right of the building's center so it sits in the area left of the
+ * 320 px side panel on desktop.
+ */
 const VIEWS: Record<ViewPreset, CameraPose> = {
-  overview: { position: [-9, 27, -15], target: [C.x - 2, 0, C.z - 1] },
-  plan: { position: [C.x, 52, C.z + 0.001], target: [C.x, 0, C.z] },
+  overview: { position: [-12.5, 25, -9.5], target: [17.5, 0, 15] },
+  plan: { position: [C.x + 6.5, 56, C.z + 0.001], target: [C.x + 6.5, 0, C.z] },
   hall: { position: [1.2, 1.7, 6.5], target: [30, 1.8, 6.5] },
   mezzanine: { position: [36, 4.4, 15.5], target: [25, 3.4, 19] },
 }

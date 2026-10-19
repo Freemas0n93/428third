@@ -26,10 +26,7 @@ page.on('response', (r) => {
 
 const stats = () => page.evaluate(() => window.__428 ?? null)
 const statusText = () =>
-  page.evaluate(() => {
-    const el = [...document.querySelectorAll('div')].find((d) => /Scan model v33|Loading building|failed to load/.test(d.textContent ?? '') && d.children.length <= 2)
-    return el?.textContent ?? ''
-  })
+  page.evaluate(() => document.querySelector('[data-testid="model-status"]')?.textContent ?? '(no status element)')
 async function settle(label) {
   await page.waitForTimeout(2500)
   const s = await stats()
