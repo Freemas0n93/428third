@@ -20,7 +20,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Smoke test (headless Chromium renders the building)
         run: |
-          npx vite preview --port 4173 --strictPort > preview.log 2>&1 &
+          npx vite preview --host 127.0.0.1 --port 4173 --strictPort > preview.log 2>&1 &
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:4173/ > /dev/null && break; sleep 2; done
           curl -sf -o /dev/null http://127.0.0.1:4173/space || echo "::error title=preview::vite preview not serving: $(tail -c 300 preview.log | tr '\n' ' ')"
           node scripts/smoke.mjs http://127.0.0.1:4173 2>&1 | tee smoke.log
