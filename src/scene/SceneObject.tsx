@@ -126,9 +126,17 @@ function SceneObjectImpl({ object, selected }: Props) {
       </mesh>
 
       {showLabel && (
-        <Html position={[0, h + 0.25, 0]} center distanceFactor={14} zIndexRange={[10, 0]}>
+        {/* style on the wrapper, not just the child: in Plan view the label sits exactly over the
+            box's center and would otherwise intercept the press meant for the object. */}
+        <Html
+          position={[0, h + 0.25, 0]}
+          center
+          distanceFactor={14}
+          zIndexRange={[10, 0]}
+          style={{ pointerEvents: 'none' }}
+        >
           <div
-            className={`pointer-events-none select-none whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium shadow ${
+            className={`select-none whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium shadow ${
               selected ? 'bg-[#ff5a1f] text-black' : 'bg-black/70 text-white'
             }`}
           >
