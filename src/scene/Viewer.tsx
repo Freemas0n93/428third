@@ -55,6 +55,7 @@ function SceneContent() {
   const view = useScene((s) => s.view)
   const level = useScene((s) => s.level)
   const showStationGrid = useScene((s) => s.showStationGrid)
+  const dragging = useScene((s) => s.draggingId !== null)
   const controls = useRef<OrbitRef>(null)
   const plan = view === 'plan'
 
@@ -92,6 +93,7 @@ function SceneContent() {
       <OrbitControls
         ref={controls}
         makeDefault
+        enabled={!dragging}
         enableDamping
         dampingFactor={0.08}
         enableRotate={!plan}

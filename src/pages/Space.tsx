@@ -2,8 +2,9 @@ import { useState } from 'react'
 import Viewer from '../scene/Viewer'
 import { CATALOG, CATALOG_BY_KEY, CATEGORIES, CATEGORY_LABELS } from '../data/catalog'
 import { LAYER_GROUPS, LEVELS, MODEL_LAYERS, UPPER_THRESHOLD_Y, groupBytes, scopeVisible, type LevelMode } from '../data/building'
-import { useScene, type ViewPreset } from '../store/scene'
+import { ROTATE_STEP, SNAP_STEPS, useScene, type SnapStep, type ViewPreset } from '../store/scene'
 import { useModel } from '../store/model'
+import { SHORTCUTS, useShortcuts } from '../hooks/useShortcuts'
 
 const VIEW_BUTTONS: Array<{ key: ViewPreset; label: string }> = [
   { key: 'overview', label: 'Overview' },
@@ -28,6 +29,34 @@ function segClass(active: boolean) {
     active ? 'bg-[var(--panel-2)] text-[var(--text)]' : 'text-[var(--muted)] hover:text-[var(--text)]'
   }`
 }
+
+const SNAP_LABEL: Record<SnapStep, string> = { 0: 'Off', 0.1: '0.1 m', 0.5: '0.5 m' }
+
+/** Grid-snap step for drags. The grid is anchored at datum A, the hall corner. */
+function SnapControl() {
+  const snap = useScene((s) => s.snap)
+  const setSnap = useScene((s) => s.setSnap)
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted)]" title="Drag snaps the footprint center to this grid">
+      <span>Snap</span>
+      <div className="flex overflow-hidden rounded border border-[var(--line)]">
+        {SNAP_STEPS.map((st) => (
+          <button
+            key={st}
+            onClick={() => setSnap(st)}
+            className={`px-1.5 py-0.5 transition ${
+              snap === st ? 'bg-[var(--panel-2)] text-[var(--text)]' : 'hover:text-[var(--text)]'
+            }`}
+          >
+            {SNAP_LABEL[st]}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const btn = 'rounded border border-[var(--line)] px-2 py-1 text-xs hover:bg-[var(--panel-2)] disabled:opacity-40 disabled:hover:bg-transparent'
 
 /** Model load status: progress while fetching, then what is on screen. */
 function ModelStatus() {
@@ -124,13 +153,17 @@ export default function Space() {
   const cut = useScene((s) => s.cut)
   const setCut = useScene((s) => s.setCut)
   const updateObject = useScene((s) => s.updateObject)
+  const rotateObject = useScene((s) => s.rotateObject)
+  const toggleLock = useScene((s) => s.toggleLock)
   const removeObject = useScene((s) => s.removeObject)
   const duplicateObject = useScene((s) => s.duplicateObject)
   const addObject = useScene((s) => s.addObject)
   const [panelOpen, setPanelOpen] = useState(true)
+  useShortcuts()
 
   const selected = objects.find((o) => o.id === selectedId) ?? null
   const selectedItem = selected ? CATALOG_BY_KEY[selected.catalogKey] : null
+  const locked = Boolean(selected?.locked)
 
   return (
     <div className="relative h-full w-full">
@@ -183,13 +216,17 @@ export default function Space() {
         }`}
       >
         <section className="border-b border-[var(--line)] p-3">
-          <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Selection</h2>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Selection</h2>
+            <SnapControl />
+          </div>
           {selected && selectedItem ? (
-            <div className="space-y-2 text-sm">
+            <div className="space-y-2 text-sm" data-testid="selection">
               <input
                 value={selected.label}
                 onChange={(e) => updateObject(selected.id, { label: e.target.value })}
                 className="w-full rounded border border-[var(--line)] bg-[var(--bg)] px-2 py-1 text-sm"
+                aria-label="Object label"
               />
               <div className="text-xs text-[var(--muted)]">
                 {selectedItem.name} · {fmt(selectedItem.w)} × {fmt(selectedItem.d)} × {fmt(selectedItem.h)} m ·{' '}
@@ -202,8 +239,9 @@ export default function Space() {
                     type="number"
                     step={0.1}
                     value={selected.x}
+                    disabled={locked}
                     onChange={(e) => updateObject(selected.id, { x: Number(e.target.value) })}
-                    className="rounded border border-[var(--line)] bg-[var(--bg)] px-1.5 py-1"
+                    className="rounded border border-[var(--line)] bg-[var(--bg)] px-1.5 py-1 disabled:opacity-50"
                   />
                 </label>
                 <label className="flex flex-col gap-0.5">
@@ -212,8 +250,9 @@ export default function Space() {
                     type="number"
                     step={0.1}
                     value={selected.z}
+                    disabled={locked}
                     onChange={(e) => updateObject(selected.id, { z: Number(e.target.value) })}
-                    className="rounded border border-[var(--line)] bg-[var(--bg)] px-1.5 py-1"
+                    className="rounded border border-[var(--line)] bg-[var(--bg)] px-1.5 py-1 disabled:opacity-50"
                   />
                 </label>
                 <label className="flex flex-col gap-0.5">
@@ -222,10 +261,23 @@ export default function Space() {
                     type="number"
                     step={15}
                     value={rad2deg(selected.rotY)}
+                    disabled={locked}
                     onChange={(e) => updateObject(selected.id, { rotY: deg2rad(Number(e.target.value)) })}
-                    className="rounded border border-[var(--line)] bg-[var(--bg)] px-1.5 py-1"
+                    className="rounded border border-[var(--line)] bg-[var(--bg)] px-1.5 py-1 disabled:opacity-50"
                   />
                 </label>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="mr-1 text-[var(--muted)]">Rotate</span>
+                <button onClick={() => rotateObject(selected.id, -ROTATE_STEP)} disabled={locked} className={btn} title="Rotate −15° (⇧R)">
+                  ↺ 15°
+                </button>
+                <button onClick={() => rotateObject(selected.id, ROTATE_STEP)} disabled={locked} className={btn} title="Rotate +15° (R)">
+                  ↻ 15°
+                </button>
+                <button onClick={() => rotateObject(selected.id, Math.PI / 2)} disabled={locked} className={btn} title="Rotate 90°">
+                  90°
+                </button>
               </div>
               <label className="flex items-center gap-2 text-xs">
                 <span className="text-[var(--muted)]">Color</span>
@@ -237,26 +289,39 @@ export default function Space() {
                 />
                 <span className="font-mono text-[11px] text-[var(--muted)]">{selected.hex}</span>
               </label>
-              <div className="flex gap-2 pt-1">
+              <div className="flex flex-wrap gap-2 pt-1">
                 <button
-                  onClick={() => duplicateObject(selected.id)}
-                  className="rounded border border-[var(--line)] px-2 py-1 text-xs hover:bg-[var(--panel-2)]"
+                  onClick={() => toggleLock(selected.id)}
+                  className={`${btn} ${locked ? 'text-amber-300' : ''}`}
+                  title="Locked objects can't be moved, rotated or deleted (L)"
                 >
+                  {locked ? '🔒 Locked' : 'Lock'}
+                </button>
+                <button onClick={() => duplicateObject(selected.id)} className={btn} title="Duplicate (⌘D)">
                   Duplicate
                 </button>
                 <button
                   onClick={() => removeObject(selected.id)}
-                  className="rounded border border-[var(--line)] px-2 py-1 text-xs text-red-300 hover:bg-[var(--panel-2)]"
+                  disabled={locked}
+                  className={`${btn} text-red-300`}
+                  title="Delete (⌫)"
                 >
                   Delete
                 </button>
               </div>
             </div>
           ) : (
-            <p className="text-xs text-[var(--muted)]">
-              Click an object to select it. New items drop on the level you are viewing. Drag-to-move and rotate
-              handles arrive on Day 2.
-            </p>
+            <div className="text-xs text-[var(--muted)]">
+              <p className="mb-2">Click an object to select it. New items drop on the level you are viewing.</p>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+                {SHORTCUTS.map(([keys, action]) => (
+                  <div key={keys} className="contents">
+                    <dt className="font-mono text-[10px] text-[var(--text)]/80">{keys}</dt>
+                    <dd>{action}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           )}
         </section>
 
@@ -294,7 +359,7 @@ export default function Space() {
         </section>
 
         <footer className="border-t border-[var(--line)] p-2 text-[10px] text-[var(--muted)]">
-          {objects.length} objects · local only (sync arrives Day 3)
+          {objects.length} objects · drag to move · local only (sync arrives Day 3)
         </footer>
       </aside>
     </div>

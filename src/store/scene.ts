@@ -20,9 +20,20 @@ export interface PlacedObject {
 
 export type ViewPreset = 'overview' | 'plan' | 'hall' | 'mezzanine'
 
+/** Grid snap step in meters; 0 = off. Grid origin is datum A (the hall corner). */
+export type SnapStep = 0 | 0.1 | 0.5
+export const SNAP_STEPS: SnapStep[] = [0, 0.1, 0.5]
+
+export const ROTATE_STEP = Math.PI / 12 // 15°
+export const NUDGE_STEP = 0.1
+export const NUDGE_STEP_LARGE = 0.5
+
 interface SceneState {
   objects: PlacedObject[]
   selectedId: string | null
+  /** Id of the object currently being dragged (orbit controls pause while set). */
+  draggingId: string | null
+  snap: SnapStep
   view: ViewPreset
   /** Bumped on every setView so re-clicking a preset re-frames the camera. */
   viewNonce: number
@@ -34,15 +45,30 @@ interface SceneState {
 
   addObject: (catalogKey: string, at?: { x: number; z: number }) => string
   updateObject: (id: string, patch: Partial<Omit<PlacedObject, 'id'>>) => void
+  /** Place the footprint center at (x, z) on the object's floor, honoring the snap setting. Ignored when locked. */
+  moveObject: (id: string, x: number, z: number) => void
+  /** Shift by (dx, dz) meters without snapping. Ignored when locked. */
+  nudgeObject: (id: string, dx: number, dz: number) => void
+  /** Rotate about the footprint center by `delta` radians. Ignored when locked. */
+  rotateObject: (id: string, delta: number) => void
+  toggleLock: (id: string) => void
   removeObject: (id: string) => void
   duplicateObject: (id: string) => void
   select: (id: string | null) => void
+  setDragging: (id: string | null) => void
+  setSnap: (snap: SnapStep) => void
   setView: (view: ViewPreset) => void
   setLevel: (level: LevelMode) => void
   setCut: (on: boolean) => void
   setLayer: (key: string, on: boolean) => void
   setShowStationGrid: (on: boolean) => void
 }
+
+/** Round to mm so repeated 0.1 m nudges don't accumulate float noise. */
+const mm = (v: number) => Math.round(v * 1000) / 1000
+const snapTo = (v: number, step: SnapStep) => (step > 0 ? mm(Math.round(v / step) * step) : mm(v))
+const TAU = Math.PI * 2
+const normRot = (r: number) => ((r % TAU) + TAU) % TAU
 
 let counter = 0
 function nextId(prefix: string) {
@@ -99,6 +125,8 @@ const VIEW_LEVEL: Partial<Record<ViewPreset, LevelMode>> = { hall: 'all', mezzan
 export const useScene = create<SceneState>((set, get) => ({
   objects: seedStations(),
   selectedId: null,
+  draggingId: null,
+  snap: 0.1,
   view: 'overview',
   viewNonce: 0,
   level: 'ground',
@@ -131,11 +159,39 @@ export const useScene = create<SceneState>((set, get) => ({
       objects: s.objects.map((o) => (o.id === id ? { ...o, ...patch } : o)),
     })),
 
-  removeObject: (id) =>
+  moveObject: (id, x, z) =>
     set((s) => ({
-      objects: s.objects.filter((o) => o.id !== id),
-      selectedId: s.selectedId === id ? null : s.selectedId,
+      objects: s.objects.map((o) =>
+        o.id === id && !o.locked ? { ...o, x: snapTo(x, s.snap), z: snapTo(z, s.snap) } : o,
+      ),
     })),
+
+  nudgeObject: (id, dx, dz) =>
+    set((s) => ({
+      objects: s.objects.map((o) => (o.id === id && !o.locked ? { ...o, x: mm(o.x + dx), z: mm(o.z + dz) } : o)),
+    })),
+
+  rotateObject: (id, delta) =>
+    set((s) => ({
+      objects: s.objects.map((o) => (o.id === id && !o.locked ? { ...o, rotY: normRot(o.rotY + delta) } : o)),
+    })),
+
+  toggleLock: (id) =>
+    set((s) => ({
+      objects: s.objects.map((o) => (o.id === id ? { ...o, locked: !o.locked } : o)),
+      draggingId: s.draggingId === id ? null : s.draggingId,
+    })),
+
+  removeObject: (id) =>
+    set((s) => {
+      const target = s.objects.find((o) => o.id === id)
+      if (!target || target.locked) return s
+      return {
+        objects: s.objects.filter((o) => o.id !== id),
+        selectedId: s.selectedId === id ? null : s.selectedId,
+        draggingId: s.draggingId === id ? null : s.draggingId,
+      }
+    }),
 
   duplicateObject: (id) => {
     const src = get().objects.find((o) => o.id === id)
@@ -151,6 +207,8 @@ export const useScene = create<SceneState>((set, get) => ({
   },
 
   select: (id) => set({ selectedId: id }),
+  setDragging: (draggingId) => set({ draggingId }),
+  setSnap: (snap) => set({ snap }),
   setView: (view) =>
     set((s) => ({ view, viewNonce: s.viewNonce + 1, level: VIEW_LEVEL[view] ?? s.level })),
   setLevel: (level) => set({ level }),

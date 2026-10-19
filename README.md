@@ -54,6 +54,21 @@ The 3D model is the v33 corrected export (`Showroom_Corrected_Full_Detail.glb`: 
 
 Full pipeline, settings, measurements and re-run steps: [`scan/README.md`](scan/README.md). Raw exports go in `scan/raw/` (git-ignored).
 
+## Editing objects
+
+Press and drag a box to move it on the floor it stands on (the pointer is captured, so the drag survives leaving the box; orbit pauses while dragging). Drags snap the footprint center to a grid anchored at datum A — Off / 0.1 m / 0.5 m in the Selection panel. Locked objects select but never move.
+
+| Keys | Action |
+|---|---|
+| ← → ↑ ↓ | nudge 0.1 m (⇧ 0.5 m) — → is +X down the hall, ↑ is −Z toward the window wall |
+| R · ⇧R | rotate +15° · −15° about the footprint center |
+| L | lock / unlock |
+| ⌘D / Ctrl+D | duplicate |
+| ⌫ / Delete | delete (locked objects refuse) |
+| Esc | deselect |
+
+Shortcuts are inactive while typing in a field. The CI smoke test exercises all of these, including a synthesized pointer drag in Plan view (`scripts/smoke.mjs`).
+
 ## Conventions
 
 - Units are meters. World frame = the export's: origin at datum A (hall floor corner, Third St front / Perry St window wall), +X down the hall away from Third St, +Z across the hall toward the brick wall, +Y up. Ground floor y = 0, upper floor y = 2.745.

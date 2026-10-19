@@ -50,6 +50,79 @@ if (!ground || ground.triangles < 100000) fail(`ground view drew too little: ${J
 const click = async (name) => page.getByRole('button', { name, exact: true }).click()
 await click('Plan')
 await settle('ground-plan')
+
+// --- Day 2: object interactions (add, nudge, rotate, duplicate, drag, lock, delete) ---------
+const sel = () =>
+  page.evaluate(() => {
+    const st = window.__428?.scene?.getState()
+    if (!st) return null
+    const o = st.objects.find((x) => x.id === st.selectedId) ?? null
+    return { count: st.objects.length, dragging: st.draggingId, obj: o && { id: o.id, x: o.x, y: o.y, z: o.z, rotY: o.rotY, locked: o.locked } }
+  })
+const near = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol
+const expect = (cond, msg) => (cond ? true : (fail(`interaction: ${msg}`), false))
+
+const before = (await sel()) ?? { count: 0, obj: null }
+expect(!before.obj, 'nothing should be selected at start')
+await page.getByRole('button', { name: /^Desk 1600/ }).click()
+let s = await sel()
+if (expect(s?.obj, 'clicking a catalog item should add and select an object')) {
+  expect(s.count === before.count + 1, `object count should grow by 1 (was ${before.count}, now ${s.count})`)
+  const o0 = s.obj
+
+  await page.keyboard.press('ArrowRight')
+  s = await sel()
+  expect(near(s.obj.x, o0.x + 0.1), `ArrowRight should nudge +0.1 m in X (${o0.x} → ${s.obj.x})`)
+  await page.keyboard.press('Shift+ArrowUp')
+  s = await sel()
+  expect(near(s.obj.z, o0.z - 0.5), `Shift+ArrowUp should nudge −0.5 m in Z (${o0.z} → ${s.obj.z})`)
+
+  await page.keyboard.press('r')
+  s = await sel()
+  expect(near(s.obj.rotY, Math.PI / 12), `R should rotate 15° (rotY=${s.obj.rotY})`)
+  await click('90°')
+  s = await sel()
+  expect(near(s.obj.rotY, Math.PI / 12 + Math.PI / 2), `90° button should add a quarter turn (rotY=${s.obj.rotY})`)
+
+  await page.keyboard.press('Control+d')
+  s = await sel()
+  expect(s.count === before.count + 2 && s.obj.id !== o0.id, 'Ctrl+D should duplicate and select the copy')
+
+  // Real pointer drag in Plan view: press on the copy's box and move 120 px to the right (+X).
+  const p0 = s.obj
+  const pt = await page.evaluate(([x, y, z]) => window.__428.project(x, y, z), [p0.x, p0.y + 0.3, p0.z])
+  await page.mouse.move(pt.x, pt.y)
+  await page.mouse.down()
+  await page.mouse.move(pt.x + 40, pt.y, { steps: 4 })
+  const mid = await sel()
+  expect(mid.dragging === p0.id, 'orbit should be paused (draggingId set) during a drag')
+  await page.mouse.move(pt.x + 120, pt.y, { steps: 8 })
+  await page.mouse.up()
+  await page.waitForTimeout(200)
+  s = await sel()
+  expect(s.obj.id === p0.id, 'drag should keep the dragged object selected')
+  expect(s.obj.x - p0.x > 1.0, `drag right should move +X by metres (${p0.x} → ${s.obj.x})`)
+  expect(Math.abs(s.obj.z - p0.z) < 0.5, `drag right should not move Z much (${p0.z} → ${s.obj.z})`)
+  expect(near(s.obj.x * 10, Math.round(s.obj.x * 10), 1e-6), `dragged X should land on the 0.1 m grid (${s.obj.x})`)
+  expect(s.dragging === null, 'draggingId should clear after pointer up')
+  notice('drag', `pointer drag moved the object ${(s.obj.x - p0.x).toFixed(2)} m in X, ${(s.obj.z - p0.z).toFixed(2)} m in Z`)
+
+  await page.keyboard.press('l')
+  s = await sel()
+  expect(s.obj.locked === true, 'L should lock the object')
+  const lockedX = s.obj.x
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('Delete')
+  s = await sel()
+  expect(s.obj && near(s.obj.x, lockedX) && s.count === before.count + 2, 'locked object should ignore nudge and delete')
+  await page.keyboard.press('l')
+  await page.keyboard.press('Delete')
+  s = await sel()
+  expect(!s.obj && s.count === before.count + 1, 'Delete should remove the unlocked object and clear selection')
+  await page.keyboard.press('Escape')
+}
+notice('interactions', 'add / nudge / rotate / duplicate / drag / lock / delete exercised')
+
 await click('Upper')
 await page.waitForFunction(() => document.body.innerText.includes('Scan model v33'), null, { timeout: 120000 }).catch(() => undefined)
 const upper = await settle('upper-plan')
