@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,3 +14,10 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run build
+      - name: Smoke test (headless Chromium renders the building)
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.48.2
+          npx playwright install --with-deps chromium
+          npx vite preview --port 4173 --strictPort &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:4173/ > /dev/null && break; sleep 2; done
+          node scripts/smoke.mjs http://127.0.0.1:4173

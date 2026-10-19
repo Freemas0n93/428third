@@ -4,10 +4,13 @@ import { Grid, OrbitControls } from '@react-three/drei'
 import Building from './Building'
 import SceneObject from './SceneObject'
 import StationGrid from './StationGrid'
+import DebugStats from './DebugStats'
 import { SITE_DIMS, UPPER_THRESHOLD_Y } from '../data/building'
 import { useScene, type ViewPreset } from '../store/scene'
 
 type OrbitRef = ComponentRef<typeof OrbitControls>
+
+const DEBUG = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug')
 
 interface CameraPose {
   position: [number, number, number]
@@ -95,6 +98,7 @@ function SceneContent() {
         screenSpacePanning={plan}
       />
       <CameraRig controls={controls} />
+      {DEBUG && <DebugStats />}
     </>
   )
 }
