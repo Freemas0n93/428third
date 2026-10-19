@@ -125,9 +125,9 @@ function SceneObjectImpl({ object, selected }: Props) {
         <meshBasicMaterial color={outline} transparent opacity={selected ? 0.35 : 0.25} />
       </mesh>
 
+      {/* pointerEvents goes on the wrapper, not just the child: in Plan view the label sits exactly
+          over the box's center and would otherwise intercept the press meant for the object. */}
       {showLabel && (
-        {/* style on the wrapper, not just the child: in Plan view the label sits exactly over the
-            box's center and would otherwise intercept the press meant for the object. */}
         <Html
           position={[0, h + 0.25, 0]}
           center
